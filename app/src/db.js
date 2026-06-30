@@ -150,6 +150,25 @@ export function distinctEvents() {
     .map((r) => r.event);
 }
 
+// One row per session (sid): event count, first/last time, and the most recent
+// chat question (pulled from the chat_request event's JSON) as a preview.
+export function sessionsSummary(limit = 200) {
+  const lim = Math.min(Math.max(Number(limit) || 200, 1), 1000);
+  const sql = `
+    SELECT s.sid AS sid, s.n AS n, s.lastTs AS lastTs, s.firstTs AS firstTs,
+      (SELECT json_extract(data, '$.q') FROM events e
+         WHERE e.sid = s.sid AND e.event = 'chat_request'
+           AND json_extract(data, '$.q') IS NOT NULL
+         ORDER BY ts DESC LIMIT 1) AS lastQ
+    FROM (
+      SELECT sid, COUNT(*) AS n, MAX(ts) AS lastTs, MIN(ts) AS firstTs
+      FROM events WHERE sid IS NOT NULL AND sid != '' GROUP BY sid
+    ) s
+    ORDER BY s.lastTs DESC
+    LIMIT @limit`;
+  return db.prepare(sql).all({ limit: lim });
+}
+
 export function pruneOlderThan(days) {
   if (!days || days <= 0) return 0;
   const cutoff = Date.now() - days * 86400 * 1000;

@@ -16,8 +16,13 @@
   .wrap{max-width:1040px;margin:0 auto;padding:20px 18px 60px}
   header.top{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px}
   h1{font-size:20px;margin:0}
-  .sub{color:var(--muted);font-size:12.5px;margin:0 0 16px}
+  .sub{color:var(--muted);font-size:12.5px;margin:0 0 14px}
   a{color:var(--accent)}
+
+  /* Tabs */
+  .tabs{display:flex;gap:6px;margin:0 0 14px;border-bottom:1px solid var(--line)}
+  .tab{background:none;border:none;border-bottom:2px solid transparent;padding:8px 14px;font:inherit;cursor:pointer;color:var(--muted)}
+  .tab.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
 
   /* Stat tiles */
   .stats{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 16px}
@@ -38,7 +43,7 @@
   .dot{width:9px;height:9px;border-radius:50%;background:#bbb;flex:none}
   .dot.on{background:#2e8b57;box-shadow:0 0 0 3px rgba(46,139,87,.18)}
 
-  /* Rows */
+  /* Log rows */
   .rows{display:flex;flex-direction:column;gap:6px}
   .row{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 12px;cursor:pointer}
   .row:hover{border-color:var(--line2)}
@@ -52,10 +57,34 @@
   .meta{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .chip{display:inline-block;font-size:11px;background:#efe7d8;border-radius:5px;padding:1px 6px;margin-left:6px;color:var(--muted)}
   .chip.s5{background:#f6e3df;color:var(--err)}
+  .chip.sidchip{cursor:pointer}
+  .chip.sidchip:hover{background:var(--accent);color:#fff}
   pre.detail{margin:8px 0 2px;background:#2b2017;color:#f1e8da;border-radius:8px;padding:11px 13px;overflow:auto;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}
   .muted{color:var(--faint)}
   .empty{text-align:center;color:var(--faint);padding:40px 0}
   .foot{text-align:center;margin-top:16px}
+
+  /* Sessions list */
+  .scard{display:block;width:100%;text-align:left;padding:12px 14px;margin:0 0 10px;background:var(--card);border:1px solid var(--line);border-radius:10px;cursor:pointer}
+  .scard:hover{border-color:var(--line2)}
+  .scard .q{font-weight:600;color:var(--ink)}
+  .scard .m{color:var(--muted);font-size:12.5px;margin-top:3px}
+
+  /* Conversation transcript */
+  .back{display:inline-block;margin:0 0 14px;font-size:13px;cursor:pointer;background:none;border:none;color:var(--accent);padding:0}
+  .convohead{margin:0 0 14px}
+  .turn{margin:0 0 14px}
+  .bub{padding:10px 13px;border-radius:12px;max-width:88%}
+  .me .bub{background:linear-gradient(160deg,#7C342E,#5e2723);color:#f6e9e0;margin-left:auto;border-top-right-radius:4px}
+  .bot .bub{background:#fff;border:1px solid var(--line);border-top-left-radius:4px}
+  .who{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);margin:0 0 3px}
+  .me .who{text-align:right}
+  .recs{margin:6px 0 0;font-size:12.5px;color:#5b4a36;padding-left:18px}
+  .recs li{margin:2px 0}
+  .tag{display:inline-block;font-size:11px;background:#efe7d8;border-radius:5px;padding:1px 6px;margin-left:6px;color:var(--muted)}
+  .evtline{font-size:12px;color:var(--faint);padding:3px 0;border-top:1px dashed var(--line)}
+  .evtline.err{color:var(--err)}
+  .hidden{display:none}
 </style>
 </head>
 <body>
@@ -66,37 +95,76 @@
   </header>
   <p class="sub">Events forwarded from the Cloudflare Worker. Newest first. Click a row for full detail.</p>
 
-  <div class="stats" id="stats"></div>
-
-  <div class="bar">
-    <input type="text" id="q" placeholder="Search text, sid, path, message…" />
-    <label>Level
-      <select id="level"><option value="">all</option><option value="info">info</option><option value="error">error</option></select>
-    </label>
-    <label>Event
-      <select id="event"><option value="">all</option></select>
-    </label>
-    <label>Show
-      <select id="limit"><option>100</option><option selected>200</option><option>500</option><option>1000</option></select>
-    </label>
-    <button id="apply" class="primary">Apply</button>
-    <button id="reset">Reset</button>
-    <button id="liveBtn">Go live</button>
+  <div class="tabs">
+    <button class="tab active" id="tabLogs">Live logs</button>
+    <button class="tab" id="tabSessions">Sessions</button>
   </div>
 
-  <div class="rows" id="rows"></div>
-  <div class="foot"><button id="more" style="display:none">Load older</button></div>
+  <!-- ===== LOGS VIEW ===== -->
+  <div id="logsView">
+    <div class="stats" id="stats"></div>
+
+    <div class="bar">
+      <input type="text" id="q" placeholder="Search text, sid, path, message…" />
+      <label>Level
+        <select id="level"><option value="">all</option><option value="info">info</option><option value="error">error</option></select>
+      </label>
+      <label>Event
+        <select id="event"><option value="">all</option></select>
+      </label>
+      <label>Show
+        <select id="limit"><option>100</option><option selected>200</option><option>500</option><option>1000</option></select>
+      </label>
+      <button id="apply" class="primary">Apply</button>
+      <button id="reset">Reset</button>
+      <button id="liveBtn">Go live</button>
+    </div>
+
+    <div class="rows" id="rows"></div>
+    <div class="foot"><button id="more" style="display:none">Load older</button></div>
+  </div>
+
+  <!-- ===== SESSIONS VIEW ===== -->
+  <div id="sessionsView" class="hidden">
+    <div id="sessionListWrap">
+      <div class="bar">
+        <input type="text" id="sq" placeholder="Filter sessions by text or sid…" />
+        <button id="srefresh">Refresh</button>
+      </div>
+      <div id="sessionList"></div>
+    </div>
+    <div id="conversationWrap" class="hidden">
+      <button class="back" id="convoBack">← All sessions</button>
+      <div class="convohead" id="convoHead"></div>
+      <div id="conversation"></div>
+    </div>
+  </div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 const TZ = "Australia/Sydney";
 const fmtTime = (ts) => new Date(ts).toLocaleString("en-AU", { timeZone: TZ, hour12:false });
+const fmtTimeShort = (ts) => new Date(ts).toLocaleTimeString("en-AU", { timeZone: TZ, hour12:false });
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 
 let oldestId = null;     // for "load older" keyset pagination
 let live = false, es = null;
+let allSessions = [];    // cached session list for client-side filtering
 
+/* ---------------- view switching ---------------- */
+function showTab(name){
+  const isLogs = name === "logs";
+  $("logsView").classList.toggle("hidden", !isLogs);
+  $("sessionsView").classList.toggle("hidden", isLogs);
+  $("tabLogs").classList.toggle("active", isLogs);
+  $("tabSessions").classList.toggle("active", !isLogs);
+  if (!isLogs) loadSessions();
+}
+$("tabLogs").addEventListener("click", ()=>showTab("logs"));
+$("tabSessions").addEventListener("click", ()=>showTab("sessions"));
+
+/* ---------------- logs view ---------------- */
 function filters(){
   return { q: $("q").value.trim(), level: $("level").value, event: $("event").value, limit: $("limit").value };
 }
@@ -107,16 +175,14 @@ function matchesFilters(e){
   if (f.q){ const blob = JSON.stringify(e.data||e).toLowerCase(); if (!blob.includes(f.q.toLowerCase())) return false; }
   return true;
 }
-
 function summary(e){
   const d = e.data || {};
   const bits = [];
   if (e.path) bits.push(esc(e.path));
   if (e.status != null) bits.push(`<span class="chip ${e.status>=500?'s5':''}">${e.status}</span>`);
   if (e.ms != null) bits.push(`<span class="chip">${Math.round(e.ms)}ms</span>`);
-  if (e.sid) bits.push(`<span class="chip">sid ${esc(String(e.sid).slice(0,10))}</span>`);
+  if (e.sid) bits.push(`<span class="chip sidchip" data-sid="${esc(e.sid)}" title="View this session">sid ${esc(String(e.sid).slice(0,10))}</span>`);
   if (e.msg) bits.push(esc(e.msg));
-  // Fall back to a compact preview of remaining fields.
   if (!bits.length){
     const skip = new Set(["t","ts","at","lvl","level","evt","event","kind","action"]);
     const extra = Object.entries(d).filter(([k])=>!skip.has(k)).slice(0,4)
@@ -125,7 +191,6 @@ function summary(e){
   }
   return bits.join("  ");
 }
-
 function rowEl(e){
   const div = document.createElement("div");
   const lvl = (e.level||"info")==="error" ? "error":"info";
@@ -137,7 +202,9 @@ function rowEl(e){
        <span class="evt">${esc(e.event||"(event)")}</span>
        <span class="meta">${summary(e)}</span>
      </div>`;
-  div.addEventListener("click", () => {
+  div.addEventListener("click", (ev) => {
+    const chip = ev.target.closest(".sidchip");
+    if (chip){ ev.stopPropagation(); showTab("sessions"); openSession(chip.dataset.sid); return; }
     const open = div.querySelector("pre.detail");
     if (open){ open.remove(); return; }
     const pre = document.createElement("pre");
@@ -147,7 +214,6 @@ function rowEl(e){
   });
   return div;
 }
-
 async function loadStats(){
   try{
     const s = await (await fetch("/api/stats")).json();
@@ -155,7 +221,7 @@ async function loadStats(){
       `<div class="stat"><div class="n">${s.last24??0}</div><div class="k">last 24h</div></div>
        <div class="stat err"><div class="n">${s.errors24??0}</div><div class="k">errors 24h</div></div>
        <div class="stat"><div class="n">${s.total??0}</div><div class="k">total stored</div></div>
-       <div class="stat"><div class="n">${s.newestTs?fmtTime(s.newestTs).split(", ")[1]||"—":"—"}</div><div class="k">last event</div></div>`;
+       <div class="stat"><div class="n">${s.newestTs?fmtTimeShort(s.newestTs):"—"}</div><div class="k">last event</div></div>`;
   }catch(_){}
 }
 async function loadEventNames(){
@@ -166,7 +232,6 @@ async function loadEventNames(){
     sel.value = cur;
   }catch(_){}
 }
-
 function buildQuery(extra){
   const f = filters(), p = new URLSearchParams();
   if (f.q) p.set("q", f.q);
@@ -176,7 +241,6 @@ function buildQuery(extra){
   if (extra && extra.before_id) p.set("before_id", extra.before_id);
   return p.toString();
 }
-
 async function load(reset=true){
   const rows = $("rows");
   if (reset){ rows.innerHTML = ""; oldestId = null; }
@@ -187,7 +251,6 @@ async function load(reset=true){
   if (data.length){ oldestId = data[data.length-1].id; }
   $("more").style.display = data.length >= Number(filters().limit) ? "" : "none";
 }
-
 function setLive(on){
   live = on;
   $("dot").classList.toggle("on", on);
@@ -206,7 +269,6 @@ function setLive(on){
     es.onerror = ()=>{ /* browser auto-reconnects */ };
   } else if (es){ es.close(); es = null; }
 }
-
 let statsTimer = null;
 function loadStatsDebounced(){ clearTimeout(statsTimer); statsTimer = setTimeout(()=>{ loadStats(); loadEventNames(); }, 1200); }
 
@@ -216,6 +278,86 @@ $("reset").addEventListener("click", ()=>{ $("q").value=""; $("level").value="";
 $("more").addEventListener("click", ()=>load(false));
 $("liveBtn").addEventListener("click", ()=>setLive(!live));
 
+/* ---------------- sessions view ---------------- */
+async function loadSessions(){
+  $("conversationWrap").classList.add("hidden");
+  $("sessionListWrap").classList.remove("hidden");
+  const list = $("sessionList");
+  list.innerHTML = `<div class="empty">Loading sessions…</div>`;
+  try{
+    const { sessions } = await (await fetch("/api/sessions")).json();
+    allSessions = sessions || [];
+    renderSessions();
+  }catch(_){ list.innerHTML = `<div class="empty">Could not load sessions.</div>`; }
+}
+function renderSessions(){
+  const list = $("sessionList");
+  const term = $("sq").value.trim().toLowerCase();
+  const rows = allSessions.filter(s => !term ||
+    (s.lastQ||"").toLowerCase().includes(term) || (s.sid||"").toLowerCase().includes(term));
+  if (!rows.length){ list.innerHTML = `<div class="empty">No sessions yet. Once a customer chats, conversations appear here.</div>`; return; }
+  list.innerHTML = rows.map(s =>
+    `<button class="scard" data-sid="${esc(s.sid)}">
+       <div class="q">${esc(s.lastQ || "(no chat text)")}</div>
+       <div class="m">${esc(fmtTime(s.lastTs))} · ${s.n} event${s.n===1?"":"s"} · ${esc(s.sid)}</div>
+     </button>`).join("");
+}
+$("sq").addEventListener("input", renderSessions);
+$("srefresh").addEventListener("click", loadSessions);
+$("sessionList").addEventListener("click", (ev)=>{
+  const card = ev.target.closest(".scard");
+  if (card) openSession(card.dataset.sid);
+});
+$("convoBack").addEventListener("click", ()=>{
+  $("conversationWrap").classList.add("hidden");
+  $("sessionListWrap").classList.remove("hidden");
+});
+
+function convoItem(e){
+  const d = e.data || {};
+  const when = fmtTimeShort(e.ts);
+  if (e.event === "chat_request"){
+    const photo = d.hasImage ? ` <span class="tag">photo</span>` : "";
+    return `<div class="turn me"><div class="who">Customer · ${esc(when)}${photo}</div><div class="bub">${esc(d.q || "(no text)")}</div></div>`;
+  }
+  if (e.event === "chat_response"){
+    const handles = Array.isArray(d.handles) ? d.handles : [];
+    const recs = handles.length ? `<ul class="recs">${handles.map(h=>`<li>${esc(h)}</li>`).join("")}</ul>` : "";
+    const model = d.model ? ` <span class="tag">${esc(d.model)}</span>` : "";
+    const clar = d.clarifying ? ` <span class="tag">clarifying</span>` : "";
+    return `<div class="turn bot"><div class="who">Concierge · ${esc(when)}${model}${clar}</div><div class="bub">${esc(d.reply || "")}${recs}</div></div>`;
+  }
+  const actions = { view_product:"viewed product", add_to_cart:"added to cart", view_routine:"opened guide", photo_match:"sent a photo" };
+  if (actions[e.event]){
+    const what = [d.name || d.handle, d.shade || d.variant].filter(Boolean).map(esc).join(" — ");
+    return `<div class="turn"><div class="who">${esc(when)} · ${esc(actions[e.event])}</div><div class="muted" style="font-size:13px">${what}</div></div>`;
+  }
+  // Everything else (http, chat_error, client_error, sync_*, handover…) as a faint line.
+  const errcls = (e.level||"info")==="error" ? " err" : "";
+  const extra = [e.status!=null?`status ${e.status}`:"", e.ms!=null?`${Math.round(e.ms)}ms`:"", e.msg||""].filter(Boolean).map(esc).join(" · ");
+  return `<div class="evtline${errcls}">${esc(when)} · ${esc(e.event||"event")}${extra?" · "+extra:""}</div>`;
+}
+async function openSession(sid){
+  $("sessionListWrap").classList.add("hidden");
+  $("conversationWrap").classList.remove("hidden");
+  $("convoHead").innerHTML = `<div class="muted">Loading…</div>`;
+  $("conversation").innerHTML = "";
+  try{
+    const res = await fetch("/api/logs?limit=1000&sid=" + encodeURIComponent(sid));
+    const { rows } = await res.json();
+    const items = rows.slice().reverse(); // oldest first for a transcript
+    const first = items.length ? items[0].ts : null;
+    const last = items.length ? items[items.length-1].ts : null;
+    $("convoHead").innerHTML =
+      `<h1 style="font-size:18px;margin:0 0 2px">Conversation</h1>
+       <div class="sub" style="margin:0">${esc(sid)} · ${items.length} events${first?` · ${esc(fmtTime(first))} → ${esc(fmtTimeShort(last))}`:""}</div>`;
+    $("conversation").innerHTML = items.length
+      ? items.map(convoItem).join("")
+      : `<div class="empty">No events for this session.</div>`;
+  }catch(_){ $("conversation").innerHTML = `<div class="empty">Could not load this session.</div>`; }
+}
+
+/* ---------------- init ---------------- */
 loadStats(); loadEventNames(); load(true);
 </script>
 </body>

@@ -20,6 +20,7 @@ import {
   queryEvents,
   statsSummary,
   distinctEvents,
+  sessionsSummary,
   pruneOlderThan
 } from "./db.js";
 
@@ -98,6 +99,7 @@ app.get("/api/logs", (c) => {
 
 app.get("/api/stats", (c) => c.json(statsSummary()));
 app.get("/api/events", (c) => c.json({ events: distinctEvents() }));
+app.get("/api/sessions", (c) => c.json({ sessions: sessionsSummary() }));
 
 // --- live tail (SSE) -------------------------------------------------------
 app.get("/api/stream", (c) =>
