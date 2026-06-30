@@ -1,13 +1,13 @@
 # TDAConcierge log receiver — runs on the NUC.
 #
 #   log-receiver  the Node app: ingest endpoint + SQLite store + dashboard.
-#   caddy         reverse proxy that terminates HTTPS. It auto-obtains a
-#                 Let's Encrypt cert for ${LOG_DOMAIN} (your DuckDNS hostname)
-#                 and proxies to log-receiver:8080. Coexists with Home Assistant
-#                 (HA keeps its own port, e.g. :8123; logs answer on :443).
+#   caddy         reverse proxy that terminates HTTPS on a custom port
+#                 (${LOG_PORT}). It gets a Let's Encrypt cert for ${LOG_DOMAIN}
+#                 via the DuckDNS DNS-01 challenge (no port 80 needed) and
+#                 proxies to log-receiver:8080.
 #
-# Your router must forward ports 80 and 443 to this NUC so Let's Encrypt can
-# validate and the Worker can reach https://${LOG_DOMAIN}/ingest.
+# Forward your chosen ${LOG_PORT} on the router to this NUC. (Home Assistant
+# keeps its own port, e.g. :8123 — unaffected.)
 #
 # Bring it up:   docker compose up -d --build
 # Values come from the .env file next to this one (see .env.example).
@@ -33,15 +33,17 @@ services:
     networks: [tda]
 
   caddy:
-    image: caddy:2
+    build: ./caddy              # custom image: Caddy + DuckDNS DNS plugin
+    image: tda-caddy
     container_name: tda-caddy
     restart: unless-stopped
     environment:
       - LOG_DOMAIN=${LOG_DOMAIN}
+      - LOG_PORT=${LOG_PORT:-9443}
       - ACME_EMAIL=${ACME_EMAIL}
+      - DUCKDNS_TOKEN=${DUCKDNS_TOKEN}
     ports:
-      - "80:80"                 # Let's Encrypt HTTP-01 challenge + HTTPS redirect
-      - "443:443"               # public HTTPS for the dashboard + /ingest
+      - "${LOG_PORT:-9443}:${LOG_PORT:-9443}"   # public HTTPS for dashboard + /ingest
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data        # persisted certs — keep this volume!

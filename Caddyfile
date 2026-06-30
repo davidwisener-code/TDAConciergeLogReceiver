@@ -1,15 +1,22 @@
-# Caddy reverse proxy for the log receiver.
+# Caddy reverse proxy for the log receiver, on a custom HTTPS port.
 #
-# {$LOG_DOMAIN} and {$ACME_EMAIL} are read from the environment (set in .env via
-# docker-compose). Caddy automatically obtains and renews a Let's Encrypt cert
-# for the hostname using the HTTP-01 challenge — which is why port 80 must be
-# forwarded to this NUC. All traffic is proxied to the log-receiver container.
+# Values come from the environment (set in .env via docker-compose):
+#   LOG_DOMAIN     dedicated DuckDNS hostname for logs (e.g. wisenerlogs.duckdns.org)
+#   LOG_PORT       external/internal HTTPS port (e.g. 9443)
+#   ACME_EMAIL     Let's Encrypt contact
+#   DUCKDNS_TOKEN  DuckDNS API token (used for the ACME DNS-01 challenge)
+#
+# The cert is obtained/renewed via the DuckDNS DNS-01 challenge, so NO inbound
+# port 80 is required — only LOG_PORT needs to be forwarded to this NUC.
 
 {
 	email {$ACME_EMAIL}
 }
 
-{$LOG_DOMAIN} {
+{$LOG_DOMAIN}:{$LOG_PORT} {
+	tls {
+		dns duckdns {$DUCKDNS_TOKEN}
+	}
 	encode gzip
 	reverse_proxy log-receiver:8080
 }

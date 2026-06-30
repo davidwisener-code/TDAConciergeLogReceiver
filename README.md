@@ -5,10 +5,13 @@ SQLite, and serves a live dashboard — all running on your NUC in Docker, expos
 over your existing DuckDNS hostname with HTTPS via Caddy.
 
 ```
- tdaconcierge Worker ──HTTPS POST /ingest──► wisener.duckdns.org:443 ──► NUC (Docker)
-   log() forwards each       (Bearer auth)    (router fwd 80/443)        ├─ caddy (Let's Encrypt TLS + reverse proxy)
-   { t, lvl, evt, ... }                                                  └─ log-receiver (Node + SQLite + dashboard)
+ tdaconcierge Worker ──HTTPS POST /ingest──► wisenerlogs.duckdns.org:9443 ──► NUC (Docker)
+   log() forwards each       (Bearer auth)    (router fwd 9443 only)         ├─ caddy (Let's Encrypt via DuckDNS DNS-01 + reverse proxy)
+   { t, lvl, evt, ... }                                                      └─ log-receiver (Node + SQLite + dashboard)
 ```
+
+Cert is issued via the **DuckDNS DNS-01 challenge** (a DuckDNS API token), so
+**no port 80 is needed** — only your custom port (`9443`) is forwarded.
 
 The Worker's existing `log()` helper is tapped so **every** structured event it
 already emits (`http`, `chat_request`, `chat_response`, `chat_error`, `sync_ok`,
@@ -22,7 +25,8 @@ already emits (`http`, `chat_request`, `chat_response`, `chat_error`, `sync_ok`,
 ```
 TDAConcierge-LogReceiver/
 ├─ docker-compose.yml      caddy (HTTPS) + log-receiver
-├─ Caddyfile               reverse proxy + auto Let's Encrypt for ${LOG_DOMAIN}
+├─ Caddyfile               reverse proxy + Let's Encrypt via DuckDNS DNS-01
+├─ caddy/Dockerfile        Caddy built with the DuckDNS DNS plugin
 ├─ .env.example            copy to .env and fill in
 └─ app/
    ├─ Dockerfile
@@ -51,11 +55,16 @@ Also choose a dashboard `DASH_USER` / `DASH_PASS`.
 
 ### 2. DuckDNS + router
 
-- Make sure your DuckDNS hostname (`wisener.duckdns.org`) resolves to your home
-  IP. The Home Assistant DuckDNS add-on already keeps this updated.
-- On your router, **forward ports 80 and 443 to this NUC's LAN IP**. (HA stays on
-  its own port, e.g. 8123 — unaffected.) Port 80 is required for Let's Encrypt to
-  issue the cert; 443 is the public HTTPS port.
+- **Create a dedicated DuckDNS name for logs**, e.g. `wisenerlogs` →
+  `wisenerlogs.duckdns.org`, in your DuckDNS account. Keep it **separate** from
+  the Home Assistant name so the cert's DNS-01 challenge doesn't clash with the
+  HA add-on. Point it at your home IP (simplest: add it to the HA DuckDNS add-on's
+  domain list so its IP stays updated).
+- Grab your **DuckDNS token** from the DuckDNS account page (same token the HA
+  add-on uses).
+- On your router, **forward your chosen port (`9443`) to this NUC's LAN IP**.
+  No port 80/443 needed — the cert uses the DNS-01 challenge. (HA stays on its
+  own port, e.g. 8123 — unaffected.)
 
 ### 3. Configure and run on the NUC
 
@@ -63,7 +72,8 @@ Also choose a dashboard `DASH_USER` / `DASH_PASS`.
 git clone https://github.com/davidwisener-code/TDAConciergeLogReceiver.git
 cd TDAConciergeLogReceiver
 cp .env.example .env
-# edit .env: INGEST_TOKEN, DASH_USER, DASH_PASS, LOG_DOMAIN, ACME_EMAIL
+# edit .env: INGEST_TOKEN, DASH_USER, DASH_PASS, LOG_DOMAIN, LOG_PORT,
+#            DUCKDNS_TOKEN, ACME_EMAIL
 docker compose up -d --build
 ```
 
@@ -73,9 +83,9 @@ docker compose logs -f caddy           # look for "certificate obtained successf
 docker compose logs -f log-receiver    # expect {"evt":"listening","port":8080}
 ```
 
-✅ **Checkpoint:** `https://wisener.duckdns.org/healthz` returns `{"ok":true,...}`
-(no login — it's the open probe). Opening `https://wisener.duckdns.org/` prompts
-for the dashboard username/password.
+✅ **Checkpoint:** `https://wisenerlogs.duckdns.org:9443/healthz` returns
+`{"ok":true,...}` (no login — it's the open probe). Opening
+`https://wisenerlogs.duckdns.org:9443/` prompts for the dashboard login.
 
 > LAN shortcut: `http://<nuc-ip>:8080/` also works on your home network (still
 > asks for the Basic Auth login).
@@ -88,7 +98,7 @@ In `TDAConcierge-Worker/`:
 # same value as INGEST_TOKEN in .env
 npx wrangler secret put LOG_FORWARD_TOKEN
 
-npx wrangler deploy --var LOG_FORWARD_URL:https://wisener.duckdns.org/ingest
+npx wrangler deploy --var LOG_FORWARD_URL:https://wisenerlogs.duckdns.org:9443/ingest
 ```
 
 Generate some traffic (open the concierge, send a chat) and events appear on the
@@ -115,7 +125,7 @@ It accepts the Worker's native shape:
 Quick manual test (no browser login needed for /ingest):
 
 ```bash
-curl -X POST https://wisener.duckdns.org/ingest \
+curl -X POST https://wisenerlogs.duckdns.org:9443/ingest \
   -H "Authorization: Bearer $INGEST_TOKEN" -H "content-type: application/json" \
   -d '{"t":"2026-06-30T01:00:00Z","lvl":"info","evt":"test","msg":"hello from curl"}'
 ```
