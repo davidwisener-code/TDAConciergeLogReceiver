@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TDAConcierge — event logs</title>
+<style>
+  /* Palette lifted from the concierge /api/conversations review page. */
+  :root{
+    --bg:#f5f1ea; --ink:#2b2017; --muted:#7a6a55; --faint:#9a8a70;
+    --card:#fff; --line:#e6ddcf; --line2:#cdbfa6; --accent:#9A5C28;
+    --err:#7C342E;
+  }
+  *{box-sizing:border-box}
+  body{font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:1040px;margin:0 auto;padding:20px 18px 60px}
+  header.top{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+  h1{font-size:20px;margin:0}
+  .sub{color:var(--muted);font-size:12.5px;margin:0 0 16px}
+  a{color:var(--accent)}
+
+  /* Stat tiles */
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 16px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 14px;min-width:96px}
+  .stat .n{font-size:19px;font-weight:700}
+  .stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint)}
+  .stat.err .n{color:var(--err)}
+
+  /* Filter bar */
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 14px}
+  .bar input[type=text],.bar select{font:inherit;color:var(--ink);background:#fbf8f2;border:1px solid var(--line);border-radius:8px;padding:6px 9px}
+  .bar input[type=text]{flex:1;min-width:160px}
+  .bar label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line2);background:#fff;color:var(--ink);border-radius:8px;padding:6px 12px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .live{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:#bbb;flex:none}
+  .dot.on{background:#2e8b57;box-shadow:0 0 0 3px rgba(46,139,87,.18)}
+
+  /* Rows */
+  .rows{display:flex;flex-direction:column;gap:6px}
+  .row{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 12px;cursor:pointer}
+  .row:hover{border-color:var(--line2)}
+  .row.error{border-left:3px solid var(--err)}
+  .rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .time{color:var(--faint);font-variant-numeric:tabular-nums;font-size:12px;flex:none}
+  .lvl{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;border-radius:5px;padding:1px 6px;flex:none}
+  .lvl.info{background:#eef3ea;color:#3f5a36}
+  .lvl.error{background:#f6e3df;color:var(--err)}
+  .evt{font-weight:600}
+  .meta{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chip{display:inline-block;font-size:11px;background:#efe7d8;border-radius:5px;padding:1px 6px;margin-left:6px;color:var(--muted)}
+  .chip.s5{background:#f6e3df;color:var(--err)}
+  pre.detail{margin:8px 0 2px;background:#2b2017;color:#f1e8da;border-radius:8px;padding:11px 13px;overflow:auto;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}
+  .muted{color:var(--faint)}
+  .empty{text-align:center;color:var(--faint);padding:40px 0}
+  .foot{text-align:center;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>TDAConcierge event logs</h1>
+    <div class="live"><span id="dot" class="dot"></span><span id="liveTxt">live off</span></div>
+  </header>
+  <p class="sub">Events forwarded from the Cloudflare Worker. Newest first. Click a row for full detail.</p>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="bar">
+    <input type="text" id="q" placeholder="Search text, sid, path, message…" />
+    <label>Level
+      <select id="level"><option value="">all</option><option value="info">info</option><option value="error">error</option></select>
+    </label>
+    <label>Event
+      <select id="event"><option value="">all</option></select>
+    </label>
+    <label>Show
+      <select id="limit"><option>100</option><option selected>200</option><option>500</option><option>1000</option></select>
+    </label>
+    <button id="apply" class="primary">Apply</button>
+    <button id="reset">Reset</button>
+    <button id="liveBtn">Go live</button>
+  </div>
+
+  <div class="rows" id="rows"></div>
+  <div class="foot"><button id="more" style="display:none">Load older</button></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const TZ = "Australia/Sydney";
+const fmtTime = (ts) => new Date(ts).toLocaleString("en-AU", { timeZone: TZ, hour12:false });
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+
+let oldestId = null;     // for "load older" keyset pagination
+let live = false, es = null;
+
+function filters(){
+  return { q: $("q").value.trim(), level: $("level").value, event: $("event").value, limit: $("limit").value };
+}
+function matchesFilters(e){
+  const f = filters();
+  if (f.level && (e.level||"info") !== f.level) return false;
+  if (f.event && (e.event||"") !== f.event) return false;
+  if (f.q){ const blob = JSON.stringify(e.data||e).toLowerCase(); if (!blob.includes(f.q.toLowerCase())) return false; }
+  return true;
+}
+
+function summary(e){
+  const d = e.data || {};
+  const bits = [];
+  if (e.path) bits.push(esc(e.path));
+  if (e.status != null) bits.push(`<span class="chip ${e.status>=500?'s5':''}">${e.status}</span>`);
+  if (e.ms != null) bits.push(`<span class="chip">${Math.round(e.ms)}ms</span>`);
+  if (e.sid) bits.push(`<span class="chip">sid ${esc(String(e.sid).slice(0,10))}</span>`);
+  if (e.msg) bits.push(esc(e.msg));
+  // Fall back to a compact preview of remaining fields.
+  if (!bits.length){
+    const skip = new Set(["t","ts","at","lvl","level","evt","event","kind","action"]);
+    const extra = Object.entries(d).filter(([k])=>!skip.has(k)).slice(0,4)
+      .map(([k,v])=>`${esc(k)}=${esc(typeof v==="object"?JSON.stringify(v):String(v)).slice(0,40)}`);
+    bits.push(`<span class="muted">${extra.join("  ·  ")}</span>`);
+  }
+  return bits.join("  ");
+}
+
+function rowEl(e){
+  const div = document.createElement("div");
+  const lvl = (e.level||"info")==="error" ? "error":"info";
+  div.className = "row" + (lvl==="error"?" error":"");
+  div.innerHTML =
+    `<div class="rhead">
+       <span class="time">${esc(fmtTime(e.ts))}</span>
+       <span class="lvl ${lvl}">${lvl}</span>
+       <span class="evt">${esc(e.event||"(event)")}</span>
+       <span class="meta">${summary(e)}</span>
+     </div>`;
+  div.addEventListener("click", () => {
+    const open = div.querySelector("pre.detail");
+    if (open){ open.remove(); return; }
+    const pre = document.createElement("pre");
+    pre.className = "detail";
+    pre.textContent = JSON.stringify(e.data ?? e, null, 2);
+    div.appendChild(pre);
+  });
+  return div;
+}
+
+async function loadStats(){
+  try{
+    const s = await (await fetch("/api/stats")).json();
+    $("stats").innerHTML =
+      `<div class="stat"><div class="n">${s.last24??0}</div><div class="k">last 24h</div></div>
+       <div class="stat err"><div class="n">${s.errors24??0}</div><div class="k">errors 24h</div></div>
+       <div class="stat"><div class="n">${s.total??0}</div><div class="k">total stored</div></div>
+       <div class="stat"><div class="n">${s.newestTs?fmtTime(s.newestTs).split(", ")[1]||"—":"—"}</div><div class="k">last event</div></div>`;
+  }catch(_){}
+}
+async function loadEventNames(){
+  try{
+    const { events } = await (await fetch("/api/events")).json();
+    const sel = $("event"), cur = sel.value;
+    sel.innerHTML = `<option value="">all</option>` + events.map(e=>`<option>${esc(e)}</option>`).join("");
+    sel.value = cur;
+  }catch(_){}
+}
+
+function buildQuery(extra){
+  const f = filters(), p = new URLSearchParams();
+  if (f.q) p.set("q", f.q);
+  if (f.level) p.set("level", f.level);
+  if (f.event) p.set("event", f.event);
+  if (f.limit) p.set("limit", f.limit);
+  if (extra && extra.before_id) p.set("before_id", extra.before_id);
+  return p.toString();
+}
+
+async function load(reset=true){
+  const rows = $("rows");
+  if (reset){ rows.innerHTML = ""; oldestId = null; }
+  const res = await fetch("/api/logs?" + buildQuery(oldestId ? {before_id:oldestId} : null));
+  const { rows: data } = await res.json();
+  if (reset && !data.length){ rows.innerHTML = `<div class="empty">No events yet. Once the Worker forwards a log, it appears here.</div>`; $("more").style.display="none"; return; }
+  for (const e of data){ rows.appendChild(rowEl(e)); }
+  if (data.length){ oldestId = data[data.length-1].id; }
+  $("more").style.display = data.length >= Number(filters().limit) ? "" : "none";
+}
+
+function setLive(on){
+  live = on;
+  $("dot").classList.toggle("on", on);
+  $("liveTxt").textContent = on ? "live on" : "live off";
+  $("liveBtn").textContent = on ? "Stop live" : "Go live";
+  if (on){
+    es = new EventSource("/api/stream");
+    es.addEventListener("log", (ev)=>{
+      const e = JSON.parse(ev.data);
+      if (!matchesFilters(e)) return;
+      const rows = $("rows");
+      const emptyEl = rows.querySelector(".empty"); if (emptyEl) emptyEl.remove();
+      rows.insertBefore(rowEl(e), rows.firstChild);
+      loadStatsDebounced();
+    });
+    es.onerror = ()=>{ /* browser auto-reconnects */ };
+  } else if (es){ es.close(); es = null; }
+}
+
+let statsTimer = null;
+function loadStatsDebounced(){ clearTimeout(statsTimer); statsTimer = setTimeout(()=>{ loadStats(); loadEventNames(); }, 1200); }
+
+$("apply").addEventListener("click", ()=>load(true));
+$("q").addEventListener("keydown", (e)=>{ if(e.key==="Enter") load(true); });
+$("reset").addEventListener("click", ()=>{ $("q").value=""; $("level").value=""; $("event").value=""; load(true); });
+$("more").addEventListener("click", ()=>load(false));
+$("liveBtn").addEventListener("click", ()=>setLive(!live));
+
+loadStats(); loadEventNames(); load(true);
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+# TDAConcierge log receiver — runs on the NUC.
+#
+#   log-receiver  the Node app: ingest endpoint + SQLite store + dashboard.
+#   cloudflared   Cloudflare Tunnel connector. It dials OUT to Cloudflare, so
+#                 there is no port to open on your router. In the Zero Trust
+#                 dashboard, point your public hostname (e.g.
+#                 logs.yourdomain.com) at  http://log-receiver:8080.
+#
+# Bring it up:   docker compose up -d --build
+# Values come from the .env file next to this one (see .env.example).
+
+services:
+  log-receiver:
+    build: ./app
+    image: tda-log-receiver
+    container_name: tda-log-receiver
+    restart: unless-stopped
+    environment:
+      - INGEST_TOKEN=${INGEST_TOKEN}
+      - RETAIN_DAYS=${RETAIN_DAYS:-30}
+      - PORT=8080
+    volumes:
+      - ./data:/data            # SQLite DB persists here on the NUC
+    ports:
+      - "8080:8080"             # optional: reach the dashboard on the NUC LAN
+    networks: [tda]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: tda-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    depends_on:
+      - log-receiver
+    networks: [tda]
+
+networks:
+  tda:
+    driver: bridge

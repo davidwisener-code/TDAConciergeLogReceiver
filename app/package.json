@@ -1,0 +1,19 @@
+{
+  "name": "tda-log-receiver",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Receives TDAConcierge event logs from Cloudflare over a tunnel, stores them in SQLite, and serves a live dashboard.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.6.14"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
