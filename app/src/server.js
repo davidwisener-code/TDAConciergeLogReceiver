@@ -12,6 +12,7 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { basicAuth } from "hono/basic-auth";
 import { streamSSE } from "hono/streaming";
 import { EventEmitter } from "node:events";
 import {
@@ -25,11 +26,27 @@ import {
 const PORT = Number(process.env.PORT || 8080);
 const INGEST_TOKEN = process.env.INGEST_TOKEN || "";
 const RETAIN_DAYS = Number(process.env.RETAIN_DAYS || 30);
+const DASH_USER = process.env.DASH_USER || "";
+const DASH_PASS = process.env.DASH_PASS || "";
 
 const bus = new EventEmitter();
 bus.setMaxListeners(0); // many SSE clients may subscribe
 
 const app = new Hono();
+
+// Basic Auth guards the dashboard + read APIs once exposed to the internet.
+// `/ingest` stays Bearer-token-only (the Worker can't do interactive login) and
+// `/healthz` stays open (probes). No-op unless DASH_USER + DASH_PASS are set.
+if (DASH_USER && DASH_PASS) {
+  const guard = basicAuth({ username: DASH_USER, password: DASH_PASS });
+  app.use("*", async (c, next) => {
+    const p = c.req.path;
+    if (p === "/ingest" || p === "/healthz") return next();
+    return guard(c, next);
+  });
+} else {
+  console.log(JSON.stringify({ t: new Date().toISOString(), evt: "warn", msg: "dashboard auth DISABLED (set DASH_USER/DASH_PASS)" }));
+}
 
 app.get("/healthz", (c) => c.json({ ok: true, ts: Date.now() }));
 

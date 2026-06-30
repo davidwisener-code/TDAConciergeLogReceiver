@@ -1,10 +1,13 @@
 # TDAConcierge log receiver — runs on the NUC.
 #
 #   log-receiver  the Node app: ingest endpoint + SQLite store + dashboard.
-#   cloudflared   Cloudflare Tunnel connector. It dials OUT to Cloudflare, so
-#                 there is no port to open on your router. In the Zero Trust
-#                 dashboard, point your public hostname (e.g.
-#                 logs.yourdomain.com) at  http://log-receiver:8080.
+#   caddy         reverse proxy that terminates HTTPS. It auto-obtains a
+#                 Let's Encrypt cert for ${LOG_DOMAIN} (your DuckDNS hostname)
+#                 and proxies to log-receiver:8080. Coexists with Home Assistant
+#                 (HA keeps its own port, e.g. :8123; logs answer on :443).
+#
+# Your router must forward ports 80 and 443 to this NUC so Let's Encrypt can
+# validate and the Worker can reach https://${LOG_DOMAIN}/ingest.
 #
 # Bring it up:   docker compose up -d --build
 # Values come from the .env file next to this one (see .env.example).
@@ -17,24 +20,39 @@ services:
     restart: unless-stopped
     environment:
       - INGEST_TOKEN=${INGEST_TOKEN}
+      - DASH_USER=${DASH_USER}
+      - DASH_PASS=${DASH_PASS}
       - RETAIN_DAYS=${RETAIN_DAYS:-30}
       - PORT=8080
     volumes:
       - ./data:/data            # SQLite DB persists here on the NUC
+    expose:
+      - "8080"                  # internal only; Caddy reaches it over the network
     ports:
-      - "8080:8080"             # optional: reach the dashboard on the NUC LAN
+      - "8080:8080"             # optional: reach the dashboard on the NUC LAN (http)
     networks: [tda]
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: tda-cloudflared
+  caddy:
+    image: caddy:2
+    container_name: tda-caddy
     restart: unless-stopped
-    command: tunnel --no-autoupdate run
     environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+      - LOG_DOMAIN=${LOG_DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    ports:
+      - "80:80"                 # Let's Encrypt HTTP-01 challenge + HTTPS redirect
+      - "443:443"               # public HTTPS for the dashboard + /ingest
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # persisted certs — keep this volume!
+      - caddy_config:/config
     depends_on:
       - log-receiver
     networks: [tda]
+
+volumes:
+  caddy_data:
+  caddy_config:
 
 networks:
   tda:
