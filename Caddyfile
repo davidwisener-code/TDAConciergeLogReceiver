@@ -16,6 +16,9 @@
 {$LOG_DOMAIN}:{$LOG_PORT} {
 	tls {
 		dns duckdns {$DUCKDNS_TOKEN}
+		# Use public resolvers for the DNS-01 challenge — the container's
+		# default resolver can return SERVFAIL on the zone lookup.
+		resolvers 1.1.1.1 8.8.8.8
 	}
 	encode gzip
 	reverse_proxy log-receiver:8080
