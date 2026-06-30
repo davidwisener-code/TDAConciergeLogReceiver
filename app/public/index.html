@@ -330,7 +330,10 @@ function convoItem(e){
   const actions = { view_product:"viewed product", add_to_cart:"added to cart", view_routine:"opened guide", photo_match:"sent a photo" };
   if (actions[e.event]){
     const what = [d.name || d.handle, d.shade || d.variant].filter(Boolean).map(esc).join(" — ");
-    return `<div class="turn"><div class="who">${esc(when)} · ${esc(actions[e.event])}</div><div class="muted" style="font-size:13px">${what}</div></div>`;
+    const img = (e.event === "photo_match" && typeof d.thumb === "string" && d.thumb.indexOf("data:image") === 0)
+      ? `<div><img src="${esc(d.thumb)}" alt="customer photo" loading="lazy" style="max-width:200px;border-radius:8px;margin-top:6px;border:1px solid var(--line)"></div>`
+      : "";
+    return `<div class="turn"><div class="who">${esc(when)} · ${esc(actions[e.event])}</div><div class="muted" style="font-size:13px">${what}${img}</div></div>`;
   }
   // Everything else (http, chat_error, client_error, sync_*, handover…) as a faint line.
   const errcls = (e.level||"info")==="error" ? " err" : "";
