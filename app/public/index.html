@@ -335,6 +335,15 @@ function convoItem(e){
       : "";
     return `<div class="turn"><div class="who">${esc(when)} · ${esc(actions[e.event])}</div><div class="muted" style="font-size:13px">${what}${img}</div></div>`;
   }
+  if (e.event === "feedback"){
+    const r = d.rating;
+    const nice = r === "up"   ? "👍 rated the chat helpful"
+               : r === "down" ? "👎 rated the chat NOT helpful"
+               : r === "none" ? "cleared their chat rating"
+               : "feedback" + (r ? " (" + esc(r) + ")" : "");
+    const cls = r === "down" ? " err" : "";
+    return `<div class="evtline${cls}">${esc(when)} · <span class="evt">${nice}</span></div>`;
+  }
   // Everything else (http, chat_error, client_error, sync_*, handover…) as a faint line.
   const errcls = (e.level||"info")==="error" ? " err" : "";
   const extra = [e.status!=null?`status ${e.status}`:"", e.ms!=null?`${Math.round(e.ms)}ms`:"", e.msg||""].filter(Boolean).map(esc).join(" · ");
